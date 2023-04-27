@@ -59,10 +59,40 @@ for sensor_id, record in records.items():
     if site_timetable:
         opening_datetime_utc = site_timetable['opening_datetime_utc']
         closing_datetime_utc = site_timetable['closing_datetime_utc']
-        
-print(records)
+        if opening_datetime_utc is None or closing_datetime_utc is None or \
+                (opening_datetime_utc <= analysis_datetime_utc.strftime('%Y-%m-%d %H:%M:%S') <= closing_datetime_utc):
+            if analysis_datetime_utc - record['record_datetime'] > datetime.timedelta(hours=2):
+                if analysis_datetime_utc - record['record_datetime'] > datetime.timedelta(hours=24):
+                    alert_level = 2
+                else:
+                    alert_level = 1
+                alerts.append({
+                    'sensor_id': sensor_id,
+                    'sensor_name': record['sensor_name'],
+                    'site_id': site_id,
+                    'alert_datetime_utc': analysis_datetime_utc,
+                    'record_datetime_utc': record['record_datetime'],
+                    'alert_level': alert_level,
+                    'last_record': record['entries'] + record['exits'],
+                    'last_recordtime': record['record_datetime']
+                })
 
-db.commit()
-
-# Fermeture de la connexion à la base de données
+# Insertion des alertes dans la table "sensors_alerts"
+if len(alerts) > 0:
+    cursor = db.cursor()
+    for alert in alerts:
+        values = (
+            None,
+            alert['sensor_name'],
+            alert['sensor_id'],
+            alert['alert_level'],
+            alert['alert_datetime_utc'],
+            alert['site_id'],
+            alert['last_record'],
+            alert['last_recordtime']
+        )
+        sql = "INSERT INTO sensors_alerts (alert_id, sensor_name, sensor_id, alert_level, alert_datetime, site_id, last_record, last_recordtime) VALUES (NULL, %s, %s, %s, %s, %s, %s, %s)"
+        cursor.execute(sql, values)
+    db.commit()
+    # Fermeture de la connexion à la base de données
 db.close()
